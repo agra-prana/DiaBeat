@@ -5,16 +5,55 @@ import { Mail, Lock, ArrowRight, Loader2, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 export default function AuthScreen() {
-  const { handleLogin, handleGoogleLogin, isFirebaseConfigured } = useApp();
+  const { handleEmailLogin, handleEmailRegister, handleGoogleLogin } = useApp();
+  const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [loadingEmail, setLoadingEmail] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
-  const onSubmit = (e) => {
+  const formatFirebaseError = (err) => {
+    const code = err?.code || '';
+    if (code === 'auth/email-already-in-use') {
+      return 'Email ini sudah terdaftar. Silakan pilih tab Masuk.';
+    }
+    if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+      return 'Email atau kata sandi tidak cocok. Silakan periksa kembali.';
+    }
+    if (code === 'auth/user-not-found') {
+      return 'Akun belum terdaftar. Silakan buat akun baru.';
+    }
+    if (code === 'auth/weak-password') {
+      return 'Kata sandi terlalu pendek. Minimal gunakan 6 karakter.';
+    }
+    if (code === 'auth/invalid-email') {
+      return 'Format alamat email tidak valid.';
+    }
+    if (code === 'auth/popup-closed-by-user') {
+      return 'Proses login Google dibatalkan.';
+    }
+    return err?.message || 'Terjadi kesalahan autentikasi. Silakan coba lagi.';
+  };
+
+  const onSubmit = async (e) => {
     e.preventDefault();
-    if (email.trim() && password.trim()) {
-      handleLogin(email.trim());
+    if (!email.trim() || !password.trim()) return;
+
+    setErrorMsg('');
+    setLoadingEmail(true);
+
+    try {
+      if (isRegister) {
+        await handleEmailRegister(email.trim(), password.trim());
+      } else {
+        await handleEmailLogin(email.trim(), password.trim());
+      }
+    } catch (err) {
+      console.error('Email Auth Error:', err);
+      setErrorMsg(formatFirebaseError(err));
+    } finally {
+      setLoadingEmail(false);
     }
   };
 
@@ -24,10 +63,8 @@ export default function AuthScreen() {
     try {
       await handleGoogleLogin();
     } catch (err) {
-      console.error(err);
-      setErrorMsg(
-        err?.message || 'Gagal login dengan Google. Pastikan konfigurasi Firebase sudah benar.'
-      );
+      console.error('Google Sign-In Error:', err);
+      setErrorMsg(formatFirebaseError(err));
     } finally {
       setLoadingGoogle(false);
     }
@@ -46,8 +83,46 @@ export default function AuthScreen() {
         </div>
 
         <div className="bg-white p-8 rounded-3xl border-2 border-slate-200 shadow-sm">
-          <h2 className="text-2xl font-black text-blue-950 mb-1 italic">Masuk / Daftar</h2>
-          <p className="text-slate-500 text-xs mb-6">Mulai kelola kesehatan dan aktivitas harianmu</p>
+          {/* Mode Switcher Tabs */}
+          <div className="flex bg-slate-100 p-1 rounded-2xl mb-6 border border-slate-200">
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegister(false);
+                setErrorMsg('');
+              }}
+              className={`flex-1 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all ${
+                !isRegister
+                  ? 'bg-blue-950 text-white shadow-xs'
+                  : 'text-slate-500 hover:text-blue-950'
+              }`}
+            >
+              Masuk
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setIsRegister(true);
+                setErrorMsg('');
+              }}
+              className={`flex-1 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all ${
+                isRegister
+                  ? 'bg-blue-950 text-white shadow-xs'
+                  : 'text-slate-500 hover:text-blue-950'
+              }`}
+            >
+              Daftar Baru
+            </button>
+          </div>
+
+          <h2 className="text-2xl font-black text-blue-950 mb-1 italic">
+            {isRegister ? 'Buat Akun Baru' : 'Selamat Datang'}
+          </h2>
+          <p className="text-slate-500 text-xs mb-6">
+            {isRegister
+              ? 'Daftar dan lengkapi data fisikmu untuk analisis kesehatan'
+              : 'Masuk untuk memantau asupan, aktivitas, & risiko kesehatan'}
+          </p>
 
           {errorMsg && (
             <div className="mb-4 p-3.5 bg-red-50 border border-red-200 rounded-2xl flex items-start gap-2.5 text-xs text-red-700 font-medium">
@@ -60,7 +135,7 @@ export default function AuthScreen() {
           <button
             type="button"
             onClick={onGoogleClick}
-            disabled={loadingGoogle}
+            disabled={loadingGoogle || loadingEmail}
             className="w-full bg-white hover:bg-slate-50 text-blue-950 font-black py-3.5 px-4 rounded-2xl border-2 border-slate-200 hover:border-blue-950 transition-all text-sm flex items-center justify-center gap-3 shadow-xs mb-5 active:scale-[0.99]"
           >
             {loadingGoogle ? (
@@ -85,13 +160,13 @@ export default function AuthScreen() {
                 />
               </svg>
             )}
-            <span>{loadingGoogle ? 'Menghubungkan...' : 'Lanjut dengan Google'}</span>
+            <span>{loadingGoogle ? 'Menghubungkan Google...' : 'Lanjut dengan Google'}</span>
           </button>
 
           <div className="relative flex items-center justify-center mb-5">
             <div className="border-t border-slate-200 w-full" />
             <span className="bg-white px-3 text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0">
-              atau dengan Email
+              atau dengan Email & Sandi
             </span>
             <div className="border-t border-slate-200 w-full" />
           </div>
@@ -99,7 +174,7 @@ export default function AuthScreen() {
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
               <label className="text-xs font-bold text-blue-950 uppercase tracking-wider block mb-1">
-                Email
+                Alamat Email
               </label>
               <div className="flex items-center bg-white p-3.5 rounded-2xl border-2 border-slate-200 focus-within:border-blue-950 transition-colors">
                 <Mail className="text-slate-400 mr-3 shrink-0" size={18} />
@@ -123,8 +198,9 @@ export default function AuthScreen() {
                 <input
                   type="password"
                   required
+                  minLength={6}
                   className="bg-transparent w-full outline-none text-blue-950 font-bold placeholder:text-slate-400 text-sm"
-                  placeholder="••••••••"
+                  placeholder="Minimal 6 karakter"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -133,10 +209,17 @@ export default function AuthScreen() {
 
             <button
               type="submit"
-              className="w-full bg-blue-950 text-white font-black py-4 rounded-2xl hover:bg-blue-900 active:bg-blue-950 transition-colors uppercase tracking-wider text-sm flex items-center justify-center gap-2 mt-4"
+              disabled={loadingEmail || loadingGoogle}
+              className="w-full bg-blue-950 text-white font-black py-4 rounded-2xl hover:bg-blue-900 active:bg-blue-950 transition-colors uppercase tracking-wider text-sm flex items-center justify-center gap-2 mt-4 shadow-xs"
             >
-              <span>Masuk dengan Email</span>
-              <ArrowRight size={18} />
+              {loadingEmail ? (
+                <Loader2 size={18} className="animate-spin text-white" />
+              ) : (
+                <>
+                  <span>{isRegister ? 'Daftar Sekarang' : 'Masuk ke Aplikasi'}</span>
+                  <ArrowRight size={18} />
+                </>
+              )}
             </button>
           </form>
         </div>

@@ -12,6 +12,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
 } from 'firebase/auth';
@@ -110,6 +112,50 @@ export const signInWithGoogle = async () => {
     console.error('Google Sign-In Error:', error);
     throw error;
   }
+};
+
+/**
+ * Sign in with Email and Password
+ */
+export const signInWithEmail = async (email, password) => {
+  if (!isFirebaseConfigured || !auth) {
+    throw new Error(
+      'Firebase belum dikonfigurasi. Harap isi variabel NEXT_PUBLIC_FIREBASE_* di file .env'
+    );
+  }
+  const cred = await signInWithEmailAndPassword(auth, email, password);
+  return cred.user;
+};
+
+/**
+ * Register / Sign up with Email and Password
+ */
+export const registerWithEmail = async (email, password) => {
+  if (!isFirebaseConfigured || !auth) {
+    throw new Error(
+      'Firebase belum dikonfigurasi. Harap isi variabel NEXT_PUBLIC_FIREBASE_* di file .env'
+    );
+  }
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const user = cred.user;
+
+  if (db && user?.uid) {
+    const userDocRef = doc(db, 'users', user.uid);
+    await setDoc(userDocRef, {
+      uid: user.uid,
+      email: user.email || '',
+      name: email.split('@')[0],
+      createdAt: serverTimestamp(),
+      profile: {
+        name: email.split('@')[0],
+        age: 0,
+        height: 0,
+        weight: 0,
+      },
+    });
+  }
+
+  return user;
 };
 
 /**

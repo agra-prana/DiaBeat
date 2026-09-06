@@ -6,6 +6,8 @@ import {
   isFirebaseConfigured,
   subscribeToAuth,
   signInWithGoogle,
+  signInWithEmail,
+  registerWithEmail,
   logOut,
   saveProfileToFirestore,
   getProfileFromFirestore,
@@ -13,6 +15,7 @@ import {
   deleteLogFromFirestore,
   subscribeToDateLogs,
 } from '@/services/firebase';
+import { cloudflareDb } from '@/services/cloudflareDb';
 import {
   calculateBMR,
   calculateTDEE,
@@ -22,6 +25,18 @@ import {
 import { callGeminiAPI } from '@/services/gemini';
 
 const AppContext = createContext(null);
+
+// Helper to verify if user has filled all essential physical biometric metrics
+export const isProfileComplete = (p) => {
+  return Boolean(
+    p &&
+    p.name &&
+    p.name.trim() !== '' &&
+    Number(p.age) > 0 &&
+    Number(p.height) > 0 &&
+    Number(p.weight) > 0
+  );
+};
 
 export function AppProvider({ children }) {
   const [isClient, setIsClient] = useState(false);
@@ -50,9 +65,12 @@ export function AppProvider({ children }) {
     screentime: [],
   });
 
-  // Load initial data on client mount and listen to Firebase Auth
+  // Load initial data on client mount, initialize Cloudflare DB & listen to Auth
   useEffect(() => {
     setIsClient(true);
+
+    // Initialize Cloudflare D1 tables if configured
+    cloudflareDb.init().catch(() => {});
 
     if (isFirebaseConfigured) {
       const unsubscribe = subscribeToAuth(async (firebaseUser) => {
@@ -67,33 +85,39 @@ export function AppProvider({ children }) {
           setUser(userObj);
           storage.saveUser(userObj);
 
-          // Fetch profile from Firestore
-          const firestoreProfile = await getProfileFromFirestore(firebaseUser.uid);
-          if (firestoreProfile && firestoreProfile.name) {
-            setProfile(firestoreProfile);
-            storage.saveProfile(firestoreProfile);
+          // 1. Try fetching profile from Cloudflare D1 first
+          let fetchedProfile = await cloudflareDb.getProfile(firebaseUser.uid);
+          
+          // 2. Fallback to Firestore if D1 returns empty
+          if (!fetchedProfile) {
+            fetchedProfile = await getProfileFromFirestore(firebaseUser.uid);
+          }
+
+          if (isProfileComplete(fetchedProfile)) {
+            setProfile(fetchedProfile);
+            storage.saveProfile(fetchedProfile);
             setView('app');
           } else {
             const fallbackProfile = storage.getProfile();
-            if (fallbackProfile && fallbackProfile.name) {
+            if (isProfileComplete(fallbackProfile)) {
               setProfile(fallbackProfile);
               setView('app');
             } else {
               setProfile({
-                name: firebaseUser.displayName || '',
-                age: 0,
-                height: 0,
-                weight: 0,
+                name: firebaseUser.displayName || fetchedProfile?.name || '',
+                age: fetchedProfile?.age || 0,
+                height: fetchedProfile?.height || 0,
+                weight: fetchedProfile?.weight || 0,
+                gender: fetchedProfile?.gender || 'male',
               });
-              setView('profile');
+              setView('profile'); // Force onboarding for physical data
             }
           }
         } else {
           setUser(null);
-          // Check local user if offline
           const storedUser = storage.getUser();
           const storedProfile = storage.getProfile();
-          if (storedUser && storedProfile && storedProfile.name) {
+          if (storedUser && isProfileComplete(storedProfile)) {
             setUser(storedUser);
             setProfile(storedProfile);
             setView('app');
@@ -109,7 +133,7 @@ export function AppProvider({ children }) {
       // Local fallback mode
       const storedUser = storage.getUser();
       const storedProfile = storage.getProfile();
-      if (storedUser && storedProfile && storedProfile.name) {
+      if (storedUser && isProfileComplete(storedProfile)) {
         setUser(storedUser);
         setProfile(storedProfile);
         setView('app');
@@ -123,27 +147,52 @@ export function AppProvider({ children }) {
     }
   }, []);
 
-  // Reload logs / subscribe to Firestore logs when user or selectedDate changes
+  // Reload logs / subscribe to Cloudflare D1 / Firestore logs
   useEffect(() => {
     if (!isClient) return;
 
-    if (isFirebaseConfigured && user?.uid) {
-      const unsubscribe = subscribeToDateLogs(user.uid, selectedDate, (dateLogs) => {
-        setLogs(dateLogs);
-      });
-      return () => unsubscribe();
-    } else {
-      const currentLogs = storage.getAllLogs(selectedDate);
-      setLogs(currentLogs);
+    let isMounted = true;
+
+    async function loadLogs() {
+      if (user?.uid) {
+        // Try Cloudflare D1 logs
+        const cfLogs = await cloudflareDb.getLogs(user.uid, selectedDate);
+        if (cfLogs && isMounted) {
+          setLogs(cfLogs);
+          return;
+        }
+      }
+
+      // Firestore or local storage fallback
+      if (isFirebaseConfigured && user?.uid) {
+        const unsubscribe = subscribeToDateLogs(user.uid, selectedDate, (dateLogs) => {
+          if (isMounted) setLogs(dateLogs);
+        });
+        return () => unsubscribe();
+      } else {
+        const currentLogs = storage.getAllLogs(selectedDate);
+        if (isMounted) setLogs(currentLogs);
+      }
     }
+
+    loadLogs();
+
+    return () => {
+      isMounted = false;
+    };
   }, [isClient, user?.uid, selectedDate]);
 
   const refreshLogs = useCallback(
-    (dateKey = selectedDate) => {
-      if (!isFirebaseConfigured || !user?.uid) {
-        const data = storage.getAllLogs(dateKey);
-        setLogs(data);
+    async (dateKey = selectedDate) => {
+      if (user?.uid) {
+        const cfLogs = await cloudflareDb.getLogs(user.uid, dateKey);
+        if (cfLogs) {
+          setLogs(cfLogs);
+          return;
+        }
       }
+      const data = storage.getAllLogs(dateKey);
+      setLogs(data);
     },
     [selectedDate, user?.uid]
   );
@@ -163,8 +212,13 @@ export function AppProvider({ children }) {
         setUser(userObj);
         storage.saveUser(userObj);
 
-        const profileData = await getProfileFromFirestore(fbUser.uid);
-        if (profileData && profileData.name) {
+        // Fetch profile from Cloudflare D1 or Firestore
+        let profileData = await cloudflareDb.getProfile(fbUser.uid);
+        if (!profileData) {
+          profileData = await getProfileFromFirestore(fbUser.uid);
+        }
+
+        if (isProfileComplete(profileData)) {
           setProfile(profileData);
           setView('app');
         } else {
@@ -172,7 +226,7 @@ export function AppProvider({ children }) {
             ...prev,
             name: fbUser.displayName || prev.name || '',
           }));
-          setView('profile');
+          setView('profile'); // Always ask for age, height, weight etc.
         }
       }
     } catch (error) {
@@ -181,21 +235,80 @@ export function AppProvider({ children }) {
     }
   };
 
-  const handleEmailLogin = (email) => {
-    const newUser = {
-      id: 'usr_' + Date.now(),
-      uid: 'usr_' + Date.now(),
-      email,
-      createdAt: new Date().toISOString(),
-    };
-    storage.saveUser(newUser);
-    setUser(newUser);
-    const existingProfile = storage.getProfile();
-    if (existingProfile && existingProfile.name) {
-      setProfile(existingProfile);
-      setView('app');
+  const handleEmailLogin = async (email, password) => {
+    if (isFirebaseConfigured) {
+      const fbUser = await signInWithEmail(email, password);
+      if (fbUser) {
+        const userObj = {
+          id: fbUser.uid,
+          uid: fbUser.uid,
+          email: fbUser.email,
+          name: fbUser.displayName || email.split('@')[0],
+          photoURL: fbUser.photoURL,
+        };
+        setUser(userObj);
+        storage.saveUser(userObj);
+
+        let profileData = await cloudflareDb.getProfile(fbUser.uid);
+        if (!profileData) {
+          profileData = await getProfileFromFirestore(fbUser.uid);
+        }
+
+        if (isProfileComplete(profileData)) {
+          setProfile(profileData);
+          setView('app');
+        } else {
+          setProfile((prev) => ({
+            ...prev,
+            name: profileData?.name || prev.name || email.split('@')[0],
+          }));
+          setView('profile'); // Force asking physical data
+        }
+      }
     } else {
-      setView('profile');
+      // Local fallback
+      const newUser = {
+        id: 'usr_' + Date.now(),
+        uid: 'usr_' + Date.now(),
+        email,
+        createdAt: new Date().toISOString(),
+      };
+      storage.saveUser(newUser);
+      setUser(newUser);
+      const existingProfile = storage.getProfile();
+      if (isProfileComplete(existingProfile)) {
+        setProfile(existingProfile);
+        setView('app');
+      } else {
+        setView('profile');
+      }
+    }
+  };
+
+  const handleEmailRegister = async (email, password) => {
+    if (isFirebaseConfigured) {
+      const fbUser = await registerWithEmail(email, password);
+      if (fbUser) {
+        const userObj = {
+          id: fbUser.uid,
+          uid: fbUser.uid,
+          email: fbUser.email,
+          name: email.split('@')[0],
+          photoURL: fbUser.photoURL,
+        };
+        setUser(userObj);
+        storage.saveUser(userObj);
+        setProfile({
+          name: email.split('@')[0],
+          age: 0,
+          height: 0,
+          weight: 0,
+          gender: 'male',
+        });
+        setView('profile'); // Always ask for physical metrics on register
+      }
+    } else {
+      handleEmailLogin(email, password);
     }
   };
 
@@ -205,6 +318,7 @@ export function AppProvider({ children }) {
         await logOut();
       }
       setUser(null);
+      storage.clearAll();
       setView('auth');
     } catch (err) {
       console.error('Logout error:', err);
@@ -215,11 +329,17 @@ export function AppProvider({ children }) {
     const saved = storage.saveProfile(newProfile);
     setProfile(saved);
 
-    if (isFirebaseConfigured && user?.uid) {
-      try {
-        await saveProfileToFirestore(user.uid, saved);
-      } catch (err) {
-        console.warn('Firestore profile save warning:', err);
+    if (user?.uid) {
+      // Save to Cloudflare D1
+      await cloudflareDb.saveProfile(user.uid, saved);
+
+      // Also save to Firestore if configured
+      if (isFirebaseConfigured) {
+        try {
+          await saveProfileToFirestore(user.uid, saved);
+        } catch (err) {
+          console.warn('Firestore profile save warning:', err);
+        }
       }
     }
 
@@ -235,22 +355,30 @@ export function AppProvider({ children }) {
     else if (type === 'sleep') record = storage.addSleep(item, dateKey);
     else if (type === 'screentime') record = storage.addScreenTime(item, dateKey);
 
-    // 2. Sync to Firestore in real-time
+    // 2. Sync to Cloudflare D1 Database
+    if (user?.uid) {
+      await cloudflareDb.addLog(user.uid, type, item, dateKey);
+    }
+
+    // 3. Sync to Firestore if configured
     if (isFirebaseConfigured && user?.uid) {
       try {
         await addLogToFirestore(user.uid, type, item, dateKey);
       } catch (err) {
         console.warn('Firestore add log error:', err);
       }
-    } else {
-      refreshLogs(dateKey);
     }
 
+    refreshLogs(dateKey);
     return record;
   };
 
   const deleteLogItem = async (type, id, dateKey = selectedDate) => {
     storage.deleteLog(type, id);
+
+    if (user?.uid) {
+      await cloudflareDb.deleteLog(user.uid, id);
+    }
 
     if (isFirebaseConfigured && user?.uid) {
       try {
@@ -258,9 +386,9 @@ export function AppProvider({ children }) {
       } catch (err) {
         console.warn('Firestore delete log error:', err);
       }
-    } else {
-      refreshLogs(dateKey);
     }
+
+    refreshLogs(dateKey);
   };
 
   // Real Metrics Calculations
@@ -369,7 +497,8 @@ export function AppProvider({ children }) {
         showIntro,
         setShowIntro,
         handleGoogleLogin,
-        handleLogin: handleEmailLogin,
+        handleEmailLogin,
+        handleEmailRegister,
         handleLogout,
         handleSaveProfile,
         logs,
