@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,700;1,900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    font-family: 'Poppins', var(--font-poppins), -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  body {
+    @apply bg-gradient-to-br from-slate-100 via-blue-50/20 to-slate-200/40 text-blue-950 font-sans selection:bg-blue-950 selection:text-white overflow-x-hidden antialiased;
+    font-family: 'Poppins', var(--font-poppins), sans-serif;
+  }
+}
+
+.pb-safe-area {
+  padding-bottom: max(env(safe-area-inset-bottom), 1.25rem);
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
