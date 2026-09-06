@@ -231,3 +231,4 @@ Aplikasi ini dirancang dan dikembangkan secara independen oleh:
 ## 📄 Lisensi
 
 Didistribusikan di bawah Lisensi **MIT**. Silakan gunakan dan kembangkan untuk tujuan edukasi dan kesehatan masyarakat.
+# DiaBeat
