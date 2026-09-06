@@ -1,0 +1,9 @@
+name = "diabeat"
+account_id = "817f78d1a9a8551b763ab5e8ee1604fd"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "out"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "diabeat-db"
+database_id = "3e1f0951-9ef7-4fa0-baab-05512f9870c2"
