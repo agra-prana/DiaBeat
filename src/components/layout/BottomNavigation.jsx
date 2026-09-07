@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Home, Smartphone, Utensils, Moon, Plus } from 'lucide-react';
+import { Home, Utensils, Activity, Moon, Plus } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 export default function BottomNavigation() {
@@ -9,9 +9,9 @@ export default function BottomNavigation() {
 
   const tabs = [
     { id: 'home', icon: Home, label: 'Home' },
-    { id: 'screentime', icon: Smartphone, label: 'Layar' },
-    { id: 'add', isAdd: true },
     { id: 'diet', icon: Utensils, label: 'Diet' },
+    { id: 'add', isAdd: true },
+    { id: 'activity', icon: Activity, label: 'Latihan' },
     { id: 'sleep', icon: Moon, label: 'Tidur' },
   ];
 

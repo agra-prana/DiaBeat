@@ -246,13 +246,102 @@ class StorageService {
     return record;
   }
 
+  // --- ALL LOGGED DATES & METADATA ---
+  getAllLoggedDates() {
+    const datesMap = {};
+    const categories = [
+      { key: STORAGE_KEYS.LOGS_ACTIVITY, type: 'activity' },
+      { key: STORAGE_KEYS.LOGS_DIET, type: 'diet' },
+      { key: STORAGE_KEYS.LOGS_SLEEP, type: 'sleep' },
+      { key: STORAGE_KEYS.LOGS_SCREENTIME, type: 'screentime' },
+    ];
+
+    categories.forEach(({ key, type }) => {
+      const items = this._getCollection(key);
+      items.forEach((item) => {
+        if (item.date) {
+          if (!datesMap[item.date]) {
+            datesMap[item.date] = { activity: 0, diet: 0, sleep: 0, screentime: 0, total: 0 };
+          }
+          datesMap[item.date][type] += 1;
+          datesMap[item.date].total += 1;
+        }
+      });
+    });
+
+    return datesMap;
+  }
+
+  // Get account start date (YYYY-MM-DD)
+  getAccountStartDate() {
+    const user = this.getUser();
+    if (user?.createdAt) {
+      const d = new Date(user.createdAt);
+      if (!isNaN(d.getTime())) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+    }
+
+    // Fallback: earliest logged date or today
+    const datesMap = this.getAllLoggedDates();
+    const sortedDates = Object.keys(datesMap).sort();
+    if (sortedDates.length > 0) {
+      return sortedDates[0];
+    }
+    return getTodayKey();
+  }
+
+  // Calculate current active logging streak (consecutive days)
+  getDailyStreak() {
+    const datesMap = this.getAllLoggedDates();
+    const today = new Date();
+    let streak = 0;
+
+    for (let i = 0; i < 365; i++) {
+      const target = new Date();
+      target.setDate(today.getDate() - i);
+      const year = target.getFullYear();
+      const month = String(target.getMonth() + 1).padStart(2, '0');
+      const day = String(target.getDate()).padStart(2, '0');
+      const key = `${year}-${month}-${day}`;
+
+      if (datesMap[key] && datesMap[key].total > 0) {
+        streak++;
+      } else if (i === 0) {
+        // Today hasn't been logged yet, check yesterday
+        continue;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  }
+
+  // Total recorded log count across all time
+  getTotalLogCount() {
+    let count = 0;
+    const keys = [
+      STORAGE_KEYS.LOGS_ACTIVITY,
+      STORAGE_KEYS.LOGS_DIET,
+      STORAGE_KEYS.LOGS_SLEEP,
+      STORAGE_KEYS.LOGS_SCREENTIME,
+    ];
+    keys.forEach((k) => {
+      count += this._getCollection(k).length;
+    });
+    return count;
+  }
+
   // --- CALENDAR AGGREGATION FOR A SPECIFIC DATE ---
   getDaySummary(dateKey) {
     const logs = this.getAllLogs(dateKey);
     const totalCal = logs.diet.reduce((acc, curr) => acc + (curr.cal || 0), 0);
     const totalBurned = logs.activity.reduce((acc, curr) => acc + (curr.cal || 0), 0);
     const totalSteps = logs.activity.reduce((acc, curr) => acc + (curr.steps || 0), 0);
-    const totalDist = logs.activity.reduce((acc, curr) => acc + (curr.dist || 0), 0);
+    const totalDist = logs.activity.reduce((acc, curr) => acc + (curr.dist || (curr.steps ? curr.steps * 0.0007 : 0)), 0);
 
     const sleepRecord = logs.sleep[0];
     const totalScreenMinutes = logs.screentime.reduce(
@@ -260,15 +349,21 @@ class StorageService {
       0
     );
 
-    // Dynamic health score calculation
-    let baseScore = 50;
-    if (totalSteps >= 8000) baseScore += 20;
-    else if (totalSteps >= 4000) baseScore += 10;
+    // Dynamic physical health score calculation (0 - 100)
+    let score = 50;
+    if (totalSteps >= 8000) score += 20;
+    else if (totalSteps >= 4000) score += 10;
 
-    if (totalCal > 0 && totalBurned > 0) baseScore += 15;
-    if (sleepRecord && (sleepRecord.minutes >= 420 || sleepRecord.quality === 'Baik')) baseScore += 15;
+    if (totalCal > 0 && totalBurned > 0) score += 15;
+    if (sleepRecord && (sleepRecord.minutes >= 420 || sleepRecord.quality === 'Baik' || sleepRecord.quality === 'Sangat Baik')) {
+      score += 15;
+    }
 
-    const score = Math.min(100, Math.max(20, baseScore));
+    if (logs.diet.length === 0 && logs.activity.length === 0 && logs.sleep.length === 0 && logs.screentime.length === 0) {
+      score = 0;
+    } else {
+      score = Math.min(100, Math.max(25, score));
+    }
 
     return {
       date: dateKey,
@@ -277,7 +372,7 @@ class StorageService {
       totalBurned,
       netCalories: totalCal - totalBurned,
       totalSteps,
-      totalDist,
+      totalDist: parseFloat(totalDist.toFixed(2)),
       sleepDuration: sleepRecord ? sleepRecord.duration : '0j 0m',
       screenTimeFormatted: formatMinutesToDuration(totalScreenMinutes),
       logs,

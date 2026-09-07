@@ -10,11 +10,9 @@ import {
   MapPin,
   Moon,
   Smartphone,
-  Flame,
+  Utensils,
   ShieldCheck,
   Loader2,
-  ArrowDownLeft,
-  ArrowUpRight,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import LogItem from '../logs/LogItem';
@@ -45,7 +43,7 @@ export default function HomeScreen() {
   const calRatio = tdee > 0 ? Math.min(100, Math.max(5, Math.round((totalCal / tdee) * 100))) : 40;
 
   return (
-    <div className="animate-fade-in pb-32">
+    <div className="pb-32">
       {/* Top Bar with Profile & Calendar Trigger */}
       <div className="flex justify-between items-center mb-5 pt-1">
         <button
@@ -105,30 +103,16 @@ export default function HomeScreen() {
           </div>
         </div>
 
-        {/* Dual Masuk vs Bakar Cards without inner fill */}
-        <div className="grid grid-cols-2 gap-2.5 pt-1">
-          <div className="p-3 rounded-2xl border border-slate-200 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-blue-950 text-white">
-                <ArrowDownLeft size={14} />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Masuk</span>
-                <span className="text-sm font-black text-blue-950">{totalCal} kkal</span>
-              </div>
-            </div>
+        {/* Dual Masuk vs Bakar Cards */}
+        <div className="grid grid-cols-2 gap-2.5 pt-1 text-center">
+          <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50">
+            <span className="text-[10px] text-slate-400 font-bold uppercase block mb-0.5">Masuk</span>
+            <span className="text-base font-black text-blue-950 block">{totalCal} kkal</span>
           </div>
 
-          <div className="p-3 rounded-2xl border border-slate-200 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-blue-950 text-white">
-                <ArrowUpRight size={14} />
-              </div>
-              <div>
-                <span className="text-[10px] text-slate-400 font-bold uppercase block">Bakar</span>
-                <span className="text-sm font-black text-blue-950">{totalBurned} kkal</span>
-              </div>
-            </div>
+          <div className="p-3 rounded-2xl border border-slate-200 bg-slate-50">
+            <span className="text-[10px] text-slate-400 font-bold uppercase block mb-0.5">Bakar</span>
+            <span className="text-base font-black text-blue-950 block">{totalBurned} kkal</span>
           </div>
         </div>
 
@@ -290,7 +274,7 @@ export default function HomeScreen() {
                   title={food.name}
                   subtitle={food.time || 'Makan'}
                   value={`${food.cal} Kkal`}
-                  icon={Flame}
+                  icon={Utensils}
                   onDelete={() => deleteLogItem('diet', food.id)}
                 />
               ))}

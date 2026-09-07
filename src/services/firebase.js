@@ -28,7 +28,6 @@ import {
   query,
   where,
   onSnapshot,
-  orderBy,
   serverTimestamp,
 } from 'firebase/firestore';
 
@@ -85,25 +84,23 @@ export const signInWithGoogle = async () => {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
 
-    // Check / initialize profile doc in Firestore if first login
+    // Check / initialize user doc in Firestore gracefully (does not block login if offline)
     if (db && user?.uid) {
-      const userDocRef = doc(db, 'users', user.uid);
-      const userSnap = await getDoc(userDocRef);
-
-      if (!userSnap.exists()) {
-        await setDoc(userDocRef, {
-          uid: user.uid,
-          email: user.email || '',
-          name: user.displayName || 'Pengguna',
-          photoURL: user.photoURL || '',
-          createdAt: serverTimestamp(),
-          profile: {
-            name: user.displayName || '',
-            age: 0,
-            height: 0,
-            weight: 0,
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        await setDoc(
+          userDocRef,
+          {
+            uid: user.uid,
+            email: user.email || '',
+            name: user.displayName || 'Pengguna',
+            photoURL: user.photoURL || '',
+            lastLoginAt: serverTimestamp(),
           },
-        });
+          { merge: true }
+        );
+      } catch (firestoreError) {
+        console.warn('Firestore user doc sync skipped (client offline / network):', firestoreError?.message || firestoreError);
       }
     }
 
@@ -140,19 +137,27 @@ export const registerWithEmail = async (email, password) => {
   const user = cred.user;
 
   if (db && user?.uid) {
-    const userDocRef = doc(db, 'users', user.uid);
-    await setDoc(userDocRef, {
-      uid: user.uid,
-      email: user.email || '',
-      name: email.split('@')[0],
-      createdAt: serverTimestamp(),
-      profile: {
-        name: email.split('@')[0],
-        age: 0,
-        height: 0,
-        weight: 0,
-      },
-    });
+    try {
+      const userDocRef = doc(db, 'users', user.uid);
+      await setDoc(
+        userDocRef,
+        {
+          uid: user.uid,
+          email: user.email || '',
+          name: email.split('@')[0],
+          createdAt: serverTimestamp(),
+          profile: {
+            name: email.split('@')[0],
+            age: 0,
+            height: 0,
+            weight: 0,
+          },
+        },
+        { merge: true }
+      );
+    } catch (firestoreError) {
+      console.warn('Firestore register profile skipped (client offline):', firestoreError?.message || firestoreError);
+    }
   }
 
   return user;
@@ -185,7 +190,6 @@ export const subscribeToAuth = (callback) => {
  */
 export const saveProfileToFirestore = async (uid, profileData) => {
   if (!db || !uid) return null;
-  const userDocRef = doc(db, 'users', uid);
   const cleanProfile = {
     name: profileData.name || '',
     age: Number(profileData.age) || 0,
@@ -195,7 +199,12 @@ export const saveProfileToFirestore = async (uid, profileData) => {
     updatedAt: serverTimestamp(),
   };
 
-  await setDoc(userDocRef, { profile: cleanProfile }, { merge: true });
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    await setDoc(userDocRef, { profile: cleanProfile }, { merge: true });
+  } catch (error) {
+    console.warn('Firestore saveProfile skipped (offline / network):', error?.message || error);
+  }
   return cleanProfile;
 };
 
@@ -204,11 +213,15 @@ export const saveProfileToFirestore = async (uid, profileData) => {
  */
 export const getProfileFromFirestore = async (uid) => {
   if (!db || !uid) return null;
-  const userDocRef = doc(db, 'users', uid);
-  const snap = await getDoc(userDocRef);
-  if (snap.exists()) {
-    const data = snap.data();
-    return data.profile || null;
+  try {
+    const userDocRef = doc(db, 'users', uid);
+    const snap = await getDoc(userDocRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      return data.profile || null;
+    }
+  } catch (error) {
+    console.warn('Firestore getProfile skipped (offline / network):', error?.message || error);
   }
   return null;
 };
@@ -220,7 +233,6 @@ export const getProfileFromFirestore = async (uid) => {
  */
 export const addLogToFirestore = async (uid, type, logItem, dateKey) => {
   if (!db || !uid) return null;
-  const colRef = collection(db, 'users', uid, 'logs');
   const payload = {
     ...logItem,
     type,
@@ -228,8 +240,14 @@ export const addLogToFirestore = async (uid, type, logItem, dateKey) => {
     createdAt: serverTimestamp(),
   };
 
-  const docRef = await addDoc(colRef, payload);
-  return { id: docRef.id, ...payload };
+  try {
+    const colRef = collection(db, 'users', uid, 'logs');
+    const docRef = await addDoc(colRef, payload);
+    return { id: docRef.id, ...payload };
+  } catch (error) {
+    console.warn('Firestore addLog skipped (offline / network):', error?.message || error);
+    return { id: `local_${Date.now()}`, ...payload };
+  }
 };
 
 /**
@@ -237,9 +255,14 @@ export const addLogToFirestore = async (uid, type, logItem, dateKey) => {
  */
 export const deleteLogFromFirestore = async (uid, logId) => {
   if (!db || !uid || !logId) return false;
-  const docRef = doc(db, 'users', uid, 'logs', logId);
-  await deleteDoc(docRef);
-  return true;
+  try {
+    const docRef = doc(db, 'users', uid, 'logs', logId);
+    await deleteDoc(docRef);
+    return true;
+  } catch (error) {
+    console.warn('Firestore deleteLog skipped (offline / network):', error?.message || error);
+    return false;
+  }
 };
 
 /**

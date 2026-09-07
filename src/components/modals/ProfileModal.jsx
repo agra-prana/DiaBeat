@@ -1,20 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { User, X, Check, LogOut } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 
 export default function ProfileModal({ isModal = false, onClose }) {
   const { profile, handleSaveProfile, handleLogout } = useApp();
-  const [form, setForm] = useState({
-    name: '',
-    age: '',
-    height: '',
-    weight: '',
-    gender: 'male',
-  });
+  const [form, setForm] = useState(() => ({
+    name: profile?.name || '',
+    age: profile?.age ? String(profile.age) : '',
+    height: profile?.height ? String(profile.height) : '',
+    weight: profile?.weight ? String(profile.weight) : '',
+    gender: profile?.gender || 'male',
+  }));
 
-  useEffect(() => {
+  const [prevProfile, setPrevProfile] = useState(profile);
+  if (profile !== prevProfile) {
+    setPrevProfile(profile);
     if (profile) {
       setForm({
         name: profile.name || '',
@@ -24,7 +26,7 @@ export default function ProfileModal({ isModal = false, onClose }) {
         gender: profile.gender || 'male',
       });
     }
-  }, [profile]);
+  }
 
   const onSubmit = (e) => {
     e.preventDefault();

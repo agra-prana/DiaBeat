@@ -194,6 +194,12 @@ export async function POST(request) {
         return NextResponse.json({ success: true });
       }
 
+      case 'raw': {
+        const { sql, params = [] } = body;
+        const results = await executeD1Query(sql, params);
+        return NextResponse.json({ success: true, results });
+      }
+
       default:
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     }

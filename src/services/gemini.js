@@ -98,16 +98,22 @@ export const parseInputHeuristically = (text) => {
     };
   }
 
-  // 4. DEFAULT TO DIET (FOOD / DRINK)
+  // 4. DIET (FOOD / DRINK)
   const calMatch = lower.match(/(\d+)\s*(kal|kkal|cal|kcal)/);
-  const estimatedCal = calMatch ? parseInt(calMatch[1], 10) : 350;
-  // Clean name
+  if (!calMatch) {
+    // Tidak menebak kalori sembarangan demi akurasi medis/kesehatan
+    return {
+      error: 'Kalori makanan tidak diketahui. Harap sertakan jumlah kkal (contoh: "Makan nasi 400 kkal") atau gunakan Form Manual.',
+    };
+  }
+
+  const estimatedCal = parseInt(calMatch[1], 10);
   let foodName = text
     .replace(/(\d+)\s*(kal|kkal|cal|kcal)/gi, '')
     .replace(/(makan|minum|sarapan|lunch|dinner|snack)\s*/gi, '')
     .trim();
 
-  if (!foodName) foodName = 'Makanan Sehat';
+  if (!foodName) foodName = 'Makanan';
   foodName = foodName.charAt(0).toUpperCase() + foodName.slice(1);
 
   return {

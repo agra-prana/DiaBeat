@@ -6,12 +6,13 @@ import { useApp } from '@/context/AppContext';
 import { extractSmartAdd } from '@/services/gemini';
 
 export default function QuickAddModal({ isOpen, onClose }) {
-  const { addLogItem, profile, setActiveTab } = useApp();
+  const { addLogItem, profile, setActiveTab, selectedDate } = useApp();
   const [mode, setMode] = useState('smart'); // 'smart' | 'manual'
   const [manualCategory, setManualCategory] = useState('diet'); // 'diet' | 'activity' | 'sleep' | 'screentime'
 
   const [promptText, setPromptText] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Manual Form States
   const [dietForm, setDietForm] = useState({ name: '', cal: '' });
@@ -24,18 +25,27 @@ export default function QuickAddModal({ isOpen, onClose }) {
   const handleSmartSubmit = async () => {
     if (!promptText.trim()) return;
     setIsAnalyzing(true);
+    setErrorMessage('');
     const userContext = `Nama: ${profile.name}, Berat: ${profile.weight}kg, Usia: ${profile.age}`;
 
     try {
       const extracted = await extractSmartAdd(promptText, userContext);
+      if (extracted?.error) {
+        setErrorMessage(extracted.error);
+        return;
+      }
       if (extracted && extracted.type && extracted.data) {
-        addLogItem(extracted.type, extracted.data);
+        addLogItem(extracted.type, extracted.data, selectedDate);
         setActiveTab(extracted.type);
         setPromptText('');
+        setErrorMessage('');
         onClose();
+      } else {
+        setErrorMessage('Tidak dapat mengenali log. Harap masukkan kalori/durasi atau gunakan Form Manual.');
       }
     } catch (err) {
       console.error('Smart add error:', err);
+      setErrorMessage('Terjadi kesalahan saat memproses input.');
     } finally {
       setIsAnalyzing(false);
     }
@@ -44,7 +54,7 @@ export default function QuickAddModal({ isOpen, onClose }) {
   const handleManualSubmit = (e) => {
     e.preventDefault();
     if (manualCategory === 'diet' && dietForm.name) {
-      addLogItem('diet', { name: dietForm.name, cal: Number(dietForm.cal) || 300 });
+      addLogItem('diet', { name: dietForm.name, cal: Number(dietForm.cal) || 300 }, selectedDate);
       setDietForm({ name: '', cal: '' });
     } else if (manualCategory === 'activity' && activityForm.name) {
       addLogItem('activity', {
@@ -52,12 +62,12 @@ export default function QuickAddModal({ isOpen, onClose }) {
         cal: Number(activityForm.cal) || 200,
         steps: Number(activityForm.steps) || 0,
         dist: Number(activityForm.dist) || 0,
-      });
+      }, selectedDate);
       setActivityForm({ name: '', cal: '', steps: '', dist: '' });
     } else if (manualCategory === 'sleep') {
-      addLogItem('sleep', { duration: sleepForm.duration, quality: sleepForm.quality });
+      addLogItem('sleep', { duration: sleepForm.duration, quality: sleepForm.quality }, selectedDate);
     } else if (manualCategory === 'screentime' && screenForm.app) {
-      addLogItem('screentime', { app: screenForm.app, duration: screenForm.duration });
+      addLogItem('screentime', { app: screenForm.app, duration: screenForm.duration }, selectedDate);
       setScreenForm({ app: '', duration: '1j 30m' });
     }
     setActiveTab(manualCategory);
@@ -110,7 +120,10 @@ export default function QuickAddModal({ isOpen, onClose }) {
                 autoFocus
                 type="text"
                 value={promptText}
-                onChange={(e) => setPromptText(e.target.value)}
+                onChange={(e) => {
+                  setPromptText(e.target.value);
+                  if (errorMessage) setErrorMessage('');
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && handleSmartSubmit()}
                 placeholder="Contoh: Tidur 8 jam nyenyak..."
                 className="w-full bg-white p-4 pr-14 rounded-2xl text-sm font-bold outline-none text-blue-950 placeholder:text-slate-400 border-2 border-slate-200 focus:border-blue-950 transition-colors"
@@ -127,6 +140,12 @@ export default function QuickAddModal({ isOpen, onClose }) {
                 {isAnalyzing ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
               </button>
             </div>
+
+            {errorMessage && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-700 leading-snug">
+                {errorMessage}
+              </div>
+            )}
           </div>
         ) : (
           <form onSubmit={handleManualSubmit} className="space-y-3.5">

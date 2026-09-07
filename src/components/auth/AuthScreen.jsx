@@ -71,7 +71,7 @@ export default function AuthScreen() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-6 animate-fade-in relative">
+    <div className="min-h-screen w-full flex items-center justify-center p-6 relative">
       <div className="w-full max-w-md relative z-10">
         <div className="mb-8 text-center">
           <h1 className="text-5xl font-black text-blue-950 mb-2 italic tracking-tighter">

@@ -212,6 +212,14 @@ export function AppProvider({ children }) {
         setUser(userObj);
         storage.saveUser(userObj);
 
+        // Fast check local storage profile first
+        const localProfile = storage.getProfile();
+        if (isProfileComplete(localProfile)) {
+          setProfile(localProfile);
+          setView('app');
+          return;
+        }
+
         // Fetch profile from Cloudflare D1 or Firestore
         let profileData = await cloudflareDb.getProfile(fbUser.uid);
         if (!profileData) {
@@ -220,13 +228,14 @@ export function AppProvider({ children }) {
 
         if (isProfileComplete(profileData)) {
           setProfile(profileData);
+          storage.saveProfile(profileData);
           setView('app');
         } else {
           setProfile((prev) => ({
             ...prev,
             name: fbUser.displayName || prev.name || '',
           }));
-          setView('profile'); // Always ask for age, height, weight etc.
+          setView('profile'); // Ask for age, height, weight etc.
         }
       }
     } catch (error) {
@@ -249,6 +258,13 @@ export function AppProvider({ children }) {
         setUser(userObj);
         storage.saveUser(userObj);
 
+        const localProfile = storage.getProfile();
+        if (isProfileComplete(localProfile)) {
+          setProfile(localProfile);
+          setView('app');
+          return;
+        }
+
         let profileData = await cloudflareDb.getProfile(fbUser.uid);
         if (!profileData) {
           profileData = await getProfileFromFirestore(fbUser.uid);
@@ -256,6 +272,7 @@ export function AppProvider({ children }) {
 
         if (isProfileComplete(profileData)) {
           setProfile(profileData);
+          storage.saveProfile(profileData);
           setView('app');
         } else {
           setProfile((prev) => ({
@@ -326,69 +343,59 @@ export function AppProvider({ children }) {
   };
 
   const handleSaveProfile = async (newProfile) => {
+    // 1. Instant optimistic local update (No lag / no UI lock)
     const saved = storage.saveProfile(newProfile);
     setProfile(saved);
-
-    if (user?.uid) {
-      // Save to Cloudflare D1
-      await cloudflareDb.saveProfile(user.uid, saved);
-
-      // Also save to Firestore if configured
-      if (isFirebaseConfigured) {
-        try {
-          await saveProfileToFirestore(user.uid, saved);
-        } catch (err) {
-          console.warn('Firestore profile save warning:', err);
-        }
-      }
-    }
-
     setView('app');
     setIsEditProfileOpen(false);
+
+    // 2. Background async sync to databases
+    if (user?.uid) {
+      cloudflareDb.saveProfile(user.uid, saved).catch((err) => {
+        console.warn('Background D1 profile save:', err);
+      });
+
+      if (isFirebaseConfigured) {
+        saveProfileToFirestore(user.uid, saved).catch((err) => {
+          console.warn('Background Firestore profile save:', err);
+        });
+      }
+    }
   };
 
   const addLogItem = async (type, item, dateKey = selectedDate) => {
-    // 1. Save locally for instant UI response
+    // 1. Save locally & refresh UI immediately (Zero latency)
     let record;
     if (type === 'activity') record = storage.addActivity(item, dateKey);
     else if (type === 'diet') record = storage.addDiet(item, dateKey);
     else if (type === 'sleep') record = storage.addSleep(item, dateKey);
     else if (type === 'screentime') record = storage.addScreenTime(item, dateKey);
 
-    // 2. Sync to Cloudflare D1 Database
-    if (user?.uid) {
-      await cloudflareDb.addLog(user.uid, type, item, dateKey);
-    }
+    refreshLogs(dateKey);
 
-    // 3. Sync to Firestore if configured
-    if (isFirebaseConfigured && user?.uid) {
-      try {
-        await addLogToFirestore(user.uid, type, item, dateKey);
-      } catch (err) {
-        console.warn('Firestore add log error:', err);
+    // 2. Background sync to Cloudflare D1 & Firestore
+    if (user?.uid) {
+      cloudflareDb.addLog(user.uid, type, item, dateKey).catch(() => {});
+      if (isFirebaseConfigured) {
+        addLogToFirestore(user.uid, type, item, dateKey).catch(() => {});
       }
     }
 
-    refreshLogs(dateKey);
     return record;
   };
 
   const deleteLogItem = async (type, id, dateKey = selectedDate) => {
+    // 1. Instant local deletion & UI update
     storage.deleteLog(type, id);
+    refreshLogs(dateKey);
 
+    // 2. Background sync to Cloudflare D1 & Firestore
     if (user?.uid) {
-      await cloudflareDb.deleteLog(user.uid, id);
-    }
-
-    if (isFirebaseConfigured && user?.uid) {
-      try {
-        await deleteLogFromFirestore(user.uid, id);
-      } catch (err) {
-        console.warn('Firestore delete log error:', err);
+      cloudflareDb.deleteLog(user.uid, id).catch(() => {});
+      if (isFirebaseConfigured) {
+        deleteLogFromFirestore(user.uid, id).catch(() => {});
       }
     }
-
-    refreshLogs(dateKey);
   };
 
   // Real Metrics Calculations
