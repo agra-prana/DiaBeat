@@ -20,9 +20,28 @@ export default function RootLayout({ children }) {
     <html lang="id" className={poppins.variable}>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+        <link rel="manifest" href="/manifest.json" />
       </head>
       <body className={`${poppins.className} font-sans bg-gradient-to-br from-slate-100 via-blue-50/20 to-slate-200/40 text-blue-950 min-h-screen antialiased`}>
         <AppProvider>{children}</AppProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(
+                    function(registration) {
+                      console.log('ServiceWorker registration successful');
+                    },
+                    function(err) {
+                      console.log('ServiceWorker registration failed: ', err);
+                    }
+                  );
+                });
+              }
+            `,
+          }}
+        />
       </body>
     </html>
   );
