@@ -65,4 +65,10 @@ export const cloudflareDb = {
     const res = await callDbApi({ action: 'deleteLog', userId, logId });
     return Boolean(res?.success);
   },
+
+  async saveInsight(userId, date, insight) {
+    if (!userId || !date || !insight) return false;
+    const res = await callDbApi({ action: 'saveInsight', userId, date, insight });
+    return Boolean(res?.success);
+  },
 };

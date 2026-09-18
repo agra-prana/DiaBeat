@@ -194,6 +194,32 @@ export async function POST(request) {
         return NextResponse.json({ success: true });
       }
 
+      case 'saveInsight': {
+        const { date, insight } = body;
+        const insightId = `ins_${userId}_${date.replace(/-/g, '')}`;
+        const query = `
+          INSERT INTO daily_insights (id, user_id, date, score, risk, analysis, diet_advice, sleep_advice, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(user_id, date) DO UPDATE SET
+            score = excluded.score,
+            risk = excluded.risk,
+            analysis = excluded.analysis,
+            diet_advice = excluded.diet_advice,
+            sleep_advice = excluded.sleep_advice;
+        `;
+        await executeD1Query(query, [
+          insightId,
+          userId,
+          date,
+          Number(insight.score) || 0,
+          insight.risk || 'Unknown',
+          insight.analysis || '',
+          insight.dietAdvice || '',
+          insight.sleepAdvice || ''
+        ]);
+        return NextResponse.json({ success: true });
+      }
+
       case 'raw': {
         const { sql, params = [] } = body;
         const results = await executeD1Query(sql, params);

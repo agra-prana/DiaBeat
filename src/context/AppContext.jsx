@@ -72,6 +72,17 @@ export function AppProvider({ children }) {
     // nyalain db cloudflare kalo disetup
     cloudflareDb.init().catch(() => {});
 
+    // PONYTAIL FIX: ZERO LATENCY INIT
+    // Langsung cek memori lokal sebelum Firebase loading buat cegah flash login/reset
+    const storedUser = storage.getUser();
+    const storedProfile = storage.getProfile();
+    
+    if (storedUser && isProfileComplete(storedProfile)) {
+      setUser(storedUser);
+      setProfile(storedProfile);
+      setView('app');
+    }
+
     if (isFirebaseConfigured) {
       const unsubscribe = subscribeToAuth(async (firebaseUser) => {
         if (firebaseUser) {
@@ -85,10 +96,16 @@ export function AppProvider({ children }) {
           setUser(userObj);
           storage.saveUser(userObj);
 
-          // 1. cobain tarik profil dari d1 dulu
+          // PONYTAIL FIX: Zero Latency Login
+          // 1. Tarik dari lokal dulu biar instan
+          const localProfile = storage.getProfile();
+          if (isProfileComplete(localProfile)) {
+            setProfile(localProfile);
+            if (view !== 'app') setView('app');
+          }
+
+          // 2. Background sync dari D1 (silent)
           let fetchedProfile = await cloudflareDb.getProfile(firebaseUser.uid);
-          
-          // 2. kalo kosong, baru ngambil dari firestore
           if (!fetchedProfile) {
             fetchedProfile = await getProfileFromFirestore(firebaseUser.uid);
           }
@@ -96,30 +113,24 @@ export function AppProvider({ children }) {
           if (isProfileComplete(fetchedProfile)) {
             setProfile(fetchedProfile);
             storage.saveProfile(fetchedProfile);
-            setView('app');
-          } else {
-            const fallbackProfile = storage.getProfile();
-            if (isProfileComplete(fallbackProfile)) {
-              setProfile(fallbackProfile);
-              setView('app');
-            } else {
-              setProfile({
-                name: firebaseUser.displayName || fetchedProfile?.name || '',
-                age: fetchedProfile?.age || 0,
-                height: fetchedProfile?.height || 0,
-                weight: fetchedProfile?.weight || 0,
-                gender: fetchedProfile?.gender || 'male',
-              });
-              setView('profile'); // maksa user isi data fisik
-            }
+            if (view !== 'app') setView('app'); // antisipasi kalo lokal kosong
+          } else if (!isProfileComplete(localProfile)) {
+            setProfile({
+              name: firebaseUser.displayName || fetchedProfile?.name || '',
+              age: fetchedProfile?.age || 0,
+              height: fetchedProfile?.height || 0,
+              weight: fetchedProfile?.weight || 0,
+              gender: fetchedProfile?.gender || 'male',
+            });
+            setView('profile'); // maksa user isi data fisik jika D1 & lokal sama2 kosong
           }
         } else {
           setUser(null);
-          const storedUser = storage.getUser();
-          const storedProfile = storage.getProfile();
-          if (storedUser && isProfileComplete(storedProfile)) {
-            setUser(storedUser);
-            setProfile(storedProfile);
+          const currentStoredUser = storage.getUser();
+          const currentStoredProfile = storage.getProfile();
+          if (currentStoredUser && isProfileComplete(currentStoredProfile)) {
+            setUser(currentStoredUser);
+            setProfile(currentStoredProfile);
             setView('app');
           } else {
             setView('auth');
@@ -131,8 +142,6 @@ export function AppProvider({ children }) {
       return () => unsubscribe();
     } else {
       // mode lokal tanpa server
-      const storedUser = storage.getUser();
-      const storedProfile = storage.getProfile();
       if (storedUser && isProfileComplete(storedProfile)) {
         setUser(storedUser);
         setProfile(storedProfile);
@@ -154,24 +163,40 @@ export function AppProvider({ children }) {
     let isMounted = true;
 
     async function loadLogs() {
+      // PONYTAIL FIX: Zero Latency Load
+      // Langsung munculin data dari localStorage secara instan!
+      const localLogs = storage.getAllLogs(selectedDate);
+      if (isMounted) setLogs(localLogs);
+
       if (user?.uid) {
-        // coba tarik log dari d1
+        // Background sync dari D1
         const cfLogs = await cloudflareDb.getLogs(user.uid, selectedDate);
         if (cfLogs && isMounted) {
-          setLogs(cfLogs);
+          // Hanya update state jika D1 punya data (mencegah UI blank karena D1 kosong)
+          const hasD1Data = 
+            cfLogs.activity.length > 0 || 
+            cfLogs.diet.length > 0 || 
+            cfLogs.sleep.length > 0 || 
+            cfLogs.screentime.length > 0;
+            
+          if (hasD1Data) {
+            setLogs(cfLogs);
+            // Idealnya sync balik ke localStorage juga jika D1 punya data yg ga ada di lokal
+            cfLogs.activity.forEach(a => storage.addActivity(a, selectedDate));
+            cfLogs.diet.forEach(a => storage.addDiet(a, selectedDate));
+            cfLogs.sleep.forEach(a => storage.addSleep(a, selectedDate));
+            cfLogs.screentime.forEach(a => storage.addScreenTime(a, selectedDate));
+          }
           return;
         }
       }
 
-      // kalo d1 gagal, lari ke firestore atau lokal
+      // kalo d1 gagal, lari ke firestore
       if (isFirebaseConfigured && user?.uid) {
         const unsubscribe = subscribeToDateLogs(user.uid, selectedDate, (dateLogs) => {
           if (isMounted) setLogs(dateLogs);
         });
         return () => unsubscribe();
-      } else {
-        const currentLogs = storage.getAllLogs(selectedDate);
-        if (isMounted) setLogs(currentLogs);
       }
     }
 
@@ -457,6 +482,9 @@ export function AppProvider({ children }) {
         const parsed = JSON.parse(clean);
         setHealthReport(parsed);
         storage.saveInsight(parsed, selectedDate);
+        if (user?.uid) {
+          cloudflareDb.saveInsight(user.uid, selectedDate, parsed).catch(() => {});
+        }
       } else {
         const fallback = {
           score: Math.min(
@@ -476,6 +504,9 @@ export function AppProvider({ children }) {
         };
         setHealthReport(fallback);
         storage.saveInsight(fallback, selectedDate);
+        if (user?.uid) {
+          cloudflareDb.saveInsight(user.uid, selectedDate, fallback).catch(() => {});
+        }
       }
     } catch (err) {
       console.error('Analysis error:', err);
