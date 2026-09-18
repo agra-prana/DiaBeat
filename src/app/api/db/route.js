@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 /**
  * Cloudflare D1 Database Proxy API Route
  * Handles secure database operations using Cloudflare D1 REST API

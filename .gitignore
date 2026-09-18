@@ -40,3 +40,6 @@ logs
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
+.wrangler
