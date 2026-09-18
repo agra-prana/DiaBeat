@@ -194,18 +194,15 @@ export const callGeminiAPI = async (prompt, userContext = '') => {
 export const extractSmartAdd = async (inputString, userContext = '') => {
   const prompt = `
     Analisis input cepat log kesehatan: "${inputString}".
-    ATURAN KETAT AKURASI DATA MEDIS & KESEHATAN:
-    1. DILARANG KERAS menggunakan dummy data, asumsi, atau teori coba-coba. Setiap angka harus didasarkan murni dari apa yang disebutkan pengguna.
-    2. Kategori "diet": Pengguna wajib mencantumkan kalori (kkal/kal). Jika tidak ada angka kalori yang valid, kembalikan JSON:
-       { "error": "Kalori makanan tidak diketahui. Harap sertakan jumlah kkal (contoh: 'Makan nasi 400 kkal') atau gunakan Form Manual." }
-    3. Kategori "activity": Pengguna wajib mencantumkan metrik yang akurat (kalori kkal, langkah, atau jarak km). Jangan mengarang angka yang tidak ada (isi dengan 0 jika metrik tersebut tidak disebutkan). Jika tidak ada metrik angka sama sekali, kembalikan JSON:
-       { "error": "Data aktivitas tidak lengkap. Harap sertakan jumlah kalori, langkah, atau jarak atau gunakan Form Manual." }
-    4. Kategori "sleep": Pengguna wajib mencantumkan durasi waktu yang jelas. Jika tidak ada durasi, kembalikan JSON:
+    ATURAN EKSTRAKSI DATA KESEHATAN:
+    1. Kategori "diet" (Makanan/Minuman): Jika pengguna menyebutkan kalori, gunakan angka tersebut. JIKA TIDAK ADA KALORI, gunakan pengetahuanmu untuk memperkirakan (estimasi) jumlah kalori (cal) berdasarkan porsi standar orang Indonesia.
+    2. Kategori "activity" (Olahraga/Kegiatan): Jika pengguna menyebutkan metrik (kalori, langkah, jarak), gunakan. JIKA TIDAK ADA METRIK SAMA SEKALI, estimasi jumlah kalori yang terbakar (cal) untuk aktivitas tersebut dalam durasi standar. Biarkan steps dan dist bernilai 0 jika tidak ada informasi.
+    3. Kategori "sleep": Pengguna wajib mencantumkan durasi waktu yang jelas. Jika tidak ada durasi, kembalikan JSON:
        { "error": "Durasi tidur tidak diketahui. Harap sertakan durasi tidur atau gunakan Form Manual." }
-    5. Kategori "screentime": Pengguna wajib mencantumkan durasi waktu yang jelas. Jika tidak ada durasi, kembalikan JSON:
+    4. Kategori "screentime": Pengguna wajib mencantumkan durasi waktu yang jelas. Jika tidak ada durasi, kembalikan JSON:
        { "error": "Durasi screen time tidak diketahui. Harap sertakan durasi atau gunakan Form Manual." }
 
-    Format JSON jika data lengkap dan valid:
+    Format JSON jika data lengkap dan valid (hasil estimasi kalori masukkan ke "cal"):
     - Diet: { "type": "diet", "data": { "name": "...", "cal": 0 } }
     - Activity: { "type": "activity", "data": { "name": "...", "cal": 0, "steps": 0, "dist": 0, "time": "Baru saja" } }
     - Sleep: { "type": "sleep", "data": { "duration": "...j ...m", "quality": "Baik", "date": "Tadi Malam" } }
