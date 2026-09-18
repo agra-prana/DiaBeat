@@ -104,11 +104,12 @@ export function AppProvider({ children }) {
             if (view !== 'app') setView('app');
           }
 
-          // 2. Background sync dari D1 (silent)
-          let fetchedProfile = await cloudflareDb.getProfile(firebaseUser.uid);
-          if (!fetchedProfile) {
-            fetchedProfile = await getProfileFromFirestore(firebaseUser.uid);
-          }
+          // 2. Background sync dari D1 & Firestore secara paralel (Biar loading screen cepet ilang)
+          const [cfProfile, fsProfile] = await Promise.all([
+            cloudflareDb.getProfile(firebaseUser.uid).catch(() => null),
+            getProfileFromFirestore(firebaseUser.uid).catch(() => null)
+          ]);
+          let fetchedProfile = cfProfile || fsProfile;
 
           if (isProfileComplete(fetchedProfile)) {
             setProfile(fetchedProfile);
@@ -245,11 +246,12 @@ export function AppProvider({ children }) {
           return;
         }
 
-        // tarik profil dari db
-        let profileData = await cloudflareDb.getProfile(fbUser.uid);
-        if (!profileData) {
-          profileData = await getProfileFromFirestore(fbUser.uid);
-        }
+        // tarik profil dari db secara paralel (Biar 2x lebih cepet!)
+        const [cfProfile, fsProfile] = await Promise.all([
+          cloudflareDb.getProfile(fbUser.uid).catch(() => null),
+          getProfileFromFirestore(fbUser.uid).catch(() => null)
+        ]);
+        const profileData = cfProfile || fsProfile;
 
         if (isProfileComplete(profileData)) {
           setProfile(profileData);
@@ -290,10 +292,12 @@ export function AppProvider({ children }) {
           return;
         }
 
-        let profileData = await cloudflareDb.getProfile(fbUser.uid);
-        if (!profileData) {
-          profileData = await getProfileFromFirestore(fbUser.uid);
-        }
+        // tarik profil dari db secara paralel
+        const [cfProfile, fsProfile] = await Promise.all([
+          cloudflareDb.getProfile(fbUser.uid).catch(() => null),
+          getProfileFromFirestore(fbUser.uid).catch(() => null)
+        ]);
+        const profileData = cfProfile || fsProfile;
 
         if (isProfileComplete(profileData)) {
           setProfile(profileData);
