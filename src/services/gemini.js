@@ -10,7 +10,14 @@ export const parseInputHeuristically = (text) => {
   if (lower.includes('tidur') || lower.includes('sleep') || lower.includes('bangun')) {
     const hourMatch = lower.match(/(\d+)\s*(jam|j|hour|h)/);
     const minMatch = lower.match(/(\d+)\s*(menit|m|min)/);
-    const h = hourMatch ? parseInt(hourMatch[1], 10) : 7;
+    
+    if (!hourMatch && !minMatch) {
+      return {
+        error: 'Durasi tidur tidak diketahui. Harap sertakan durasi yang akurat (contoh: "Tidur 7 jam 30 menit") atau gunakan Form Manual.',
+      };
+    }
+
+    const h = hourMatch ? parseInt(hourMatch[1], 10) : 0;
     const m = minMatch ? parseInt(minMatch[1], 10) : 0;
     const duration = `${h}j ${m}m`;
     const quality = lower.includes('nyenyak') || lower.includes('segar') || lower.includes('baik') ? 'Baik' : 'Cukup';
@@ -46,8 +53,15 @@ export const parseInputHeuristically = (text) => {
 
     const hourMatch = lower.match(/(\d+)\s*(jam|j|h)/);
     const minMatch = lower.match(/(\d+)\s*(menit|m)/);
-    const h = hourMatch ? parseInt(hourMatch[1], 10) : 1;
-    const m = minMatch ? parseInt(minMatch[1], 10) : 30;
+
+    if (!hourMatch && !minMatch) {
+      return {
+        error: 'Durasi screen time tidak diketahui. Harap sertakan durasi yang akurat (contoh: "Main Instagram 45 menit") atau gunakan Form Manual.',
+      };
+    }
+
+    const h = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+    const m = minMatch ? parseInt(minMatch[1], 10) : 0;
 
     return {
       type: 'screentime',
@@ -67,16 +81,16 @@ export const parseInputHeuristically = (text) => {
     const stepsMatch = lower.match(/(\d+)\s*(langkah|step|steps)/);
     const distMatch = lower.match(/(\d+(?:[.,]\d+)?)\s*(km|kilo|kilometer)/);
 
-    let cal = calMatch ? parseInt(calMatch[1], 10) : 250;
-    let dist = distMatch ? parseFloat(distMatch[1].replace(',', '.')) : 0;
-    let steps = stepsMatch ? parseInt(stepsMatch[1], 10) : 0;
+    // Jangan gunakan dummy data atau teori coba-coba
+    if (!calMatch && !stepsMatch && !distMatch) {
+      return {
+        error: 'Data aktivitas tidak lengkap. Harap sertakan metrik yang akurat (contoh: "Lari 5 km 350 kkal" atau "Jalan 4000 langkah") atau gunakan Form Manual.',
+      };
+    }
 
-    if (dist > 0 && steps === 0) {
-      steps = Math.round(dist * 1400); // approx 1400 steps per km
-    }
-    if (steps > 0 && cal === 250 && !calMatch) {
-      cal = Math.round(steps * 0.04); // approx 40 kcal per 1000 steps
-    }
+    const cal = calMatch ? parseInt(calMatch[1], 10) : 0;
+    const dist = distMatch ? parseFloat(distMatch[1].replace(',', '.')) : 0;
+    const steps = stepsMatch ? parseInt(stepsMatch[1], 10) : 0;
 
     let name = 'Latihan';
     for (const kw of activityKeywords) {
@@ -91,8 +105,8 @@ export const parseInputHeuristically = (text) => {
       data: {
         name: name,
         cal: cal,
-        steps: steps || 3000,
-        dist: dist || (steps ? Number((steps * 0.0007).toFixed(1)) : 2.0),
+        steps: steps,
+        dist: dist,
         time: 'Baru saja',
       },
     };
@@ -179,14 +193,25 @@ export const callGeminiAPI = async (prompt, userContext = '') => {
 // Smart Add Extractor: uses Gemini AI if possible, fallback to heuristic
 export const extractSmartAdd = async (inputString, userContext = '') => {
   const prompt = `
-    Analisis input cepat kesehatan: "${inputString}".
-    Ekstrak ke salah satu kategori JSON berikut secara tepat:
-    1. "diet" -> { "type": "diet", "data": { "name": "Nama Makanan", "cal": 350 } }
-    2. "activity" -> { "type": "activity", "data": { "name": "Lari", "cal": 250, "steps": 3000, "dist": 2.1, "time": "Sekarang" } }
-    3. "sleep" -> { "type": "sleep", "data": { "duration": "7j 30m", "quality": "Baik", "date": "Tadi Malam" } }
-    4. "screentime" -> { "type": "screentime", "data": { "app": "Instagram", "duration": "1j 30m" } }
+    Analisis input cepat log kesehatan: "${inputString}".
+    ATURAN KETAT AKURASI DATA MEDIS & KESEHATAN:
+    1. DILARANG KERAS menggunakan dummy data, asumsi, atau teori coba-coba. Setiap angka harus didasarkan murni dari apa yang disebutkan pengguna.
+    2. Kategori "diet": Pengguna wajib mencantumkan kalori (kkal/kal). Jika tidak ada angka kalori yang valid, kembalikan JSON:
+       { "error": "Kalori makanan tidak diketahui. Harap sertakan jumlah kkal (contoh: 'Makan nasi 400 kkal') atau gunakan Form Manual." }
+    3. Kategori "activity": Pengguna wajib mencantumkan metrik yang akurat (kalori kkal, langkah, atau jarak km). Jangan mengarang angka yang tidak ada (isi dengan 0 jika metrik tersebut tidak disebutkan). Jika tidak ada metrik angka sama sekali, kembalikan JSON:
+       { "error": "Data aktivitas tidak lengkap. Harap sertakan jumlah kalori, langkah, atau jarak atau gunakan Form Manual." }
+    4. Kategori "sleep": Pengguna wajib mencantumkan durasi waktu yang jelas. Jika tidak ada durasi, kembalikan JSON:
+       { "error": "Durasi tidur tidak diketahui. Harap sertakan durasi tidur atau gunakan Form Manual." }
+    5. Kategori "screentime": Pengguna wajib mencantumkan durasi waktu yang jelas. Jika tidak ada durasi, kembalikan JSON:
+       { "error": "Durasi screen time tidak diketahui. Harap sertakan durasi atau gunakan Form Manual." }
 
-    Output WAJIB hanya JSON murni.
+    Format JSON jika data lengkap dan valid:
+    - Diet: { "type": "diet", "data": { "name": "...", "cal": 0 } }
+    - Activity: { "type": "activity", "data": { "name": "...", "cal": 0, "steps": 0, "dist": 0, "time": "Baru saja" } }
+    - Sleep: { "type": "sleep", "data": { "duration": "...j ...m", "quality": "Baik", "date": "Tadi Malam" } }
+    - Screentime: { "type": "screentime", "data": { "app": "...", "duration": "...j ...m" } }
+
+    Output WAJIB hanya JSON murni tanpa markdown.
   `;
 
   const aiResult = await callGeminiAPI(prompt, userContext);
@@ -194,6 +219,9 @@ export const extractSmartAdd = async (inputString, userContext = '') => {
     try {
       const cleanJson = aiResult.replace(/```json/g, '').replace(/```/g, '').trim();
       const parsed = JSON.parse(cleanJson);
+      if (parsed?.error) {
+        return parsed;
+      }
       if (parsed && parsed.type && parsed.data) {
         return parsed;
       }

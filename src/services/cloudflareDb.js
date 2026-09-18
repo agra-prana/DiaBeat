@@ -1,8 +1,3 @@
-/**
- * Cloudflare D1 Client Service Layer for DiaBeat
- * Supports both /api/db proxy and direct Cloudflare D1 REST API execution
- */
-
 const ACCOUNT_ID =
   process.env.NEXT_PUBLIC_CLOUDFLARE_ACCOUNT_ID ||
   process.env.CLOUDFLARE_ACCOUNT_ID ||

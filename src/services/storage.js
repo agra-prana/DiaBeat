@@ -1,11 +1,4 @@
-/**
- * Repository / Storage Service Layer for DiaBeat
- * 
- * Provides an abstract data access layer for all health and activity logs.
- * Currently persists data in browser localStorage with structured models,
- * designed with exact parity for Prisma / PostgreSQL / Supabase server APIs.
- */
-
+// layer db lokal sementara pake localStorage, disiapin buat gampang pindah ke postgres/supabase
 const STORAGE_KEYS = {
   USER: 'fitplus_user',
   PROFILE: 'fitplus_profile',
@@ -16,12 +9,12 @@ const STORAGE_KEYS = {
   INSIGHTS: 'fitplus_insights',
 };
 
-// Helper to generate unique ID
+// bikin ID unik ngasal
 export const generateId = () => {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 };
 
-// Helper for today's date in YYYY-MM-DD
+// ngambil tanggal hari ini
 export const getTodayKey = () => {
   const d = new Date();
   const year = d.getFullYear();
@@ -30,14 +23,14 @@ export const getTodayKey = () => {
   return `${year}-${month}-${day}`;
 };
 
-// Format date object to YYYY-MM-DD
+// ngeformat tanggal ke string
 export const formatDateKey = (year, monthIndex, day) => {
   const m = String(monthIndex + 1).padStart(2, '0');
   const d = String(day).padStart(2, '0');
   return `${year}-${m}-${d}`;
 };
 
-// Parse minutes from duration string e.g. "2j 30m" or "1h 45m"
+// ngerubah text waktu ke angka menit (misal: "2j 30m" -> 150)
 export const parseDurationMinutes = (str) => {
   if (!str) return 0;
   let total = 0;
@@ -57,7 +50,7 @@ export const parseDurationMinutes = (str) => {
   return total;
 };
 
-// Format minutes to readable string e.g. "2j 30m"
+// balikin dari menit ke text "xj ym"
 export const formatMinutesToDuration = (minutes) => {
   if (!minutes || minutes <= 0) return '0j 0m';
   const h = Math.floor(minutes / 60);
@@ -66,7 +59,7 @@ export const formatMinutesToDuration = (minutes) => {
 };
 
 class StorageService {
-  // --- USER & PROFILE ---
+  // --- DATA USER ---
   getUser() {
     if (typeof window === 'undefined') return null;
     const raw = localStorage.getItem(STORAGE_KEYS.USER);
@@ -103,7 +96,7 @@ class StorageService {
     return cleanProfile;
   }
 
-  // --- GENERIC LOG COLLECTION HELPERS ---
+  // --- FUNGSI DASAR TARIK SIMPEN ---
   _getCollection(key) {
     if (typeof window === 'undefined') return [];
     try {
@@ -119,7 +112,7 @@ class StorageService {
     localStorage.setItem(key, JSON.stringify(items));
   }
 
-  // --- ALL LOGS BY DATE ---
+  // --- TARIK SEMUA LOG SEHARI ---
   getAllLogs(dateKey = getTodayKey()) {
     const activities = this._getCollection(STORAGE_KEYS.LOGS_ACTIVITY).filter(
       (item) => item.date === dateKey
@@ -142,7 +135,7 @@ class StorageService {
     };
   }
 
-  // --- ADD LOG ITEMS ---
+  // --- NAMBAH LOG BARU ---
   addActivity(item, dateKey = getTodayKey()) {
     const list = this._getCollection(STORAGE_KEYS.LOGS_ACTIVITY);
     const newRecord = {
@@ -151,7 +144,7 @@ class StorageService {
       name: item.name || 'Latihan',
       cal: Number(item.cal) || 0,
       steps: Number(item.steps) || 0,
-      dist: Number(item.dist) || (item.steps ? Number(item.steps) * 0.0007 : 0),
+      dist: Number(item.dist) || 0,
       time: item.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       createdAt: new Date().toISOString(),
     };
@@ -207,7 +200,7 @@ class StorageService {
     return newRecord;
   }
 
-  // --- DELETE LOG ITEM ---
+  // --- HAPUS LOG ---
   deleteLog(type, id) {
     const keyMap = {
       activity: STORAGE_KEYS.LOGS_ACTIVITY,
@@ -223,7 +216,7 @@ class StorageService {
     return true;
   }
 
-  // --- INSIGHTS / AI REPORTS ---
+  // --- HASIL ANALISA AI ---
   getInsight(dateKey = getTodayKey()) {
     const list = this._getCollection(STORAGE_KEYS.INSIGHTS);
     return list.find((ins) => ins.date === dateKey) || null;
@@ -246,7 +239,7 @@ class StorageService {
     return record;
   }
 
-  // --- ALL LOGGED DATES & METADATA ---
+  // --- CEK TANGGAL YANG ADA DATANYA ---
   getAllLoggedDates() {
     const datesMap = {};
     const categories = [
@@ -272,7 +265,7 @@ class StorageService {
     return datesMap;
   }
 
-  // Get account start date (YYYY-MM-DD)
+  // cari tau kapan akun dibuat
   getAccountStartDate() {
     const user = this.getUser();
     if (user?.createdAt) {
@@ -285,7 +278,7 @@ class StorageService {
       }
     }
 
-    // Fallback: earliest logged date or today
+    // kalo ga nemu, cari tanggal log paling tua
     const datesMap = this.getAllLoggedDates();
     const sortedDates = Object.keys(datesMap).sort();
     if (sortedDates.length > 0) {
@@ -294,7 +287,7 @@ class StorageService {
     return getTodayKey();
   }
 
-  // Calculate current active logging streak (consecutive days)
+  // ngitung streak aktif nyatet berturut-turut
   getDailyStreak() {
     const datesMap = this.getAllLoggedDates();
     const today = new Date();
@@ -311,7 +304,7 @@ class StorageService {
       if (datesMap[key] && datesMap[key].total > 0) {
         streak++;
       } else if (i === 0) {
-        // Today hasn't been logged yet, check yesterday
+        // kalo hari ini bolong, coba liat kemaren
         continue;
       } else {
         break;
@@ -320,7 +313,7 @@ class StorageService {
     return streak;
   }
 
-  // Total recorded log count across all time
+  // hitung total semua log selama ini
   getTotalLogCount() {
     let count = 0;
     const keys = [
@@ -335,13 +328,13 @@ class StorageService {
     return count;
   }
 
-  // --- CALENDAR AGGREGATION FOR A SPECIFIC DATE ---
+  // --- REKAPAN BUAT KALENDER ---
   getDaySummary(dateKey) {
     const logs = this.getAllLogs(dateKey);
     const totalCal = logs.diet.reduce((acc, curr) => acc + (curr.cal || 0), 0);
     const totalBurned = logs.activity.reduce((acc, curr) => acc + (curr.cal || 0), 0);
     const totalSteps = logs.activity.reduce((acc, curr) => acc + (curr.steps || 0), 0);
-    const totalDist = logs.activity.reduce((acc, curr) => acc + (curr.dist || (curr.steps ? curr.steps * 0.0007 : 0)), 0);
+    const totalDist = logs.activity.reduce((acc, curr) => acc + (curr.dist || 0), 0);
 
     const sleepRecord = logs.sleep[0];
     const totalScreenMinutes = logs.screentime.reduce(
@@ -349,7 +342,7 @@ class StorageService {
       0
     );
 
-    // Dynamic physical health score calculation (0 - 100)
+    // ngitung skor kesehatan, makin rajin makin tinggi
     let score = 50;
     if (totalSteps >= 8000) score += 20;
     else if (totalSteps >= 4000) score += 10;
@@ -384,7 +377,7 @@ class StorageService {
     };
   }
 
-  // Clear all local logs
+  // reset bersih semuanya
   clearAll() {
     if (typeof window === 'undefined') return;
     Object.values(STORAGE_KEYS).forEach((k) => localStorage.removeItem(k));

@@ -31,7 +31,7 @@ export default function MainPage() {
     healthReport,
   } = useApp();
 
-  // Prevent SSR flash until hydration completes
+  // nahan bentar biar gak kedap-kedip pas awal banget (SSR hydration)
   if (!isClient) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -42,42 +42,34 @@ export default function MainPage() {
     );
   }
 
-  const renderActiveScreen = () => {
-    switch (activeTab) {
-      case 'home':
-        return <HomeScreen />;
-      case 'activity':
-        return <ActivityScreen />;
-      case 'diet':
-        return <DietScreen />;
-      case 'sleep':
-        return <SleepScreen />;
-      case 'screentime':
-        return <ScreenTimeScreen />;
-      case 'calendar':
-        return <CalendarScreen />;
-      default:
-        return <HomeScreen />;
-    }
+  // mapping tab ke screen biar gak pusing pake switch-case panjang, sat set!
+  const screens = {
+    home: <HomeScreen />,
+    activity: <ActivityScreen />,
+    diet: <DietScreen />,
+    sleep: <SleepScreen />,
+    screentime: <ScreenTimeScreen />,
+    calendar: <CalendarScreen />,
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-100 via-blue-50/25 to-slate-200/50 text-blue-950 font-sans selection:bg-blue-950 selection:text-white">
       <div className="max-w-md mx-auto min-h-screen relative z-10 bg-gradient-to-b from-[#f8fafc] via-[#f1f5f9]/80 to-[#f8fafc] shadow-2xl border-x border-slate-200/80">
-        {/* Intro Overlay */}
+        
+        {/* tampilan intro pas pertama kali buka */}
         {showIntro && <IntroScreen onFinish={() => setShowIntro(false)} />}
 
-        {/* Auth / Onboarding / Main Views */}
+        {/* logic milih halaman utama, login, atau profile */}
         {view === 'auth' && <AuthScreen />}
         {view === 'profile' && <ProfileModal isModal={false} />}
         {view === 'app' && (
           <>
-            <div className="p-5">{renderActiveScreen()}</div>
+            <div className="p-5">{screens[activeTab] || <HomeScreen />}</div>
 
-            {/* Bottom Navigation */}
+            {/* navigasi bawah yang nempel terus nih */}
             <BottomNavigation />
 
-            {/* Modals & Dialogs */}
+            {/* tumpukan modal-modal pop up */}
             <QuickAddModal
               isOpen={isAddModalOpen}
               onClose={() => setIsAddModalOpen(false)}

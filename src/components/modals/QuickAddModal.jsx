@@ -54,12 +54,12 @@ export default function QuickAddModal({ isOpen, onClose }) {
   const handleManualSubmit = (e) => {
     e.preventDefault();
     if (manualCategory === 'diet' && dietForm.name) {
-      addLogItem('diet', { name: dietForm.name, cal: Number(dietForm.cal) || 300 }, selectedDate);
+      addLogItem('diet', { name: dietForm.name, cal: Number(dietForm.cal) || 0 }, selectedDate);
       setDietForm({ name: '', cal: '' });
     } else if (manualCategory === 'activity' && activityForm.name) {
       addLogItem('activity', {
         name: activityForm.name,
-        cal: Number(activityForm.cal) || 200,
+        cal: Number(activityForm.cal) || 0,
         steps: Number(activityForm.steps) || 0,
         dist: Number(activityForm.dist) || 0,
       }, selectedDate);
@@ -190,7 +190,8 @@ export default function QuickAddModal({ isOpen, onClose }) {
                 />
                 <input
                   type="number"
-                  placeholder="Estimasi Kalori (kkal)"
+                  required
+                  placeholder="Kalori (kkal)"
                   value={dietForm.cal}
                   onChange={(e) => setDietForm({ ...dietForm, cal: e.target.value })}
                   className="w-full bg-white p-3 rounded-xl text-xs font-bold text-blue-950 border-2 border-slate-200 focus:border-blue-950 outline-none"
@@ -208,20 +209,28 @@ export default function QuickAddModal({ isOpen, onClose }) {
                   onChange={(e) => setActivityForm({ ...activityForm, name: e.target.value })}
                   className="w-full bg-white p-3 rounded-xl text-xs font-bold text-blue-950 border-2 border-slate-200 focus:border-blue-950 outline-none"
                 />
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <input
                     type="number"
-                    placeholder="Kalori Terbakar (kkal)"
+                    placeholder="Kalori (kkal)"
                     value={activityForm.cal}
                     onChange={(e) => setActivityForm({ ...activityForm, cal: e.target.value })}
-                    className="w-full bg-white p-3 rounded-xl text-xs font-bold text-blue-950 border-2 border-slate-200 focus:border-blue-950 outline-none"
+                    className="w-full bg-white p-2.5 rounded-xl text-xs font-bold text-blue-950 border-2 border-slate-200 focus:border-blue-950 outline-none"
                   />
                   <input
                     type="number"
-                    placeholder="Langkah (opsional)"
+                    placeholder="Langkah"
                     value={activityForm.steps}
                     onChange={(e) => setActivityForm({ ...activityForm, steps: e.target.value })}
-                    className="w-full bg-white p-3 rounded-xl text-xs font-bold text-blue-950 border-2 border-slate-200 focus:border-blue-950 outline-none"
+                    className="w-full bg-white p-2.5 rounded-xl text-xs font-bold text-blue-950 border-2 border-slate-200 focus:border-blue-950 outline-none"
+                  />
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="Jarak (km)"
+                    value={activityForm.dist}
+                    onChange={(e) => setActivityForm({ ...activityForm, dist: e.target.value })}
+                    className="w-full bg-white p-2.5 rounded-xl text-xs font-bold text-blue-950 border-2 border-slate-200 focus:border-blue-950 outline-none"
                   />
                 </div>
               </div>
@@ -231,6 +240,7 @@ export default function QuickAddModal({ isOpen, onClose }) {
               <div className="space-y-2.5">
                 <input
                   type="text"
+                  required
                   placeholder="Durasi (cth: 7j 30m)"
                   value={sleepForm.duration}
                   onChange={(e) => setSleepForm({ ...sleepForm, duration: e.target.value })}
@@ -261,6 +271,7 @@ export default function QuickAddModal({ isOpen, onClose }) {
                 />
                 <input
                   type="text"
+                  required
                   placeholder="Durasi (cth: 2j 15m)"
                   value={screenForm.duration}
                   onChange={(e) => setScreenForm({ ...screenForm, duration: e.target.value })}

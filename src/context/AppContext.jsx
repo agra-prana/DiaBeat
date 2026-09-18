@@ -26,7 +26,7 @@ import { callGeminiAPI } from '@/services/gemini';
 
 const AppContext = createContext(null);
 
-// Helper to verify if user has filled all essential physical biometric metrics
+// ngecek user udah isi profil fisik lengkap apa belom
 export const isProfileComplete = (p) => {
   return Boolean(
     p &&
@@ -43,21 +43,21 @@ export function AppProvider({ children }) {
   const [selectedDate, setSelectedDate] = useState(getTodayKey());
   const [activeTab, setActiveTab] = useState('home');
 
-  // Auth & View
+  // state buat login & tampilan
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState({ name: '', age: 0, height: 0, weight: 0 });
-  const [view, setView] = useState('auth'); // 'auth' | 'profile' | 'app'
+  const [view, setView] = useState('auth'); 
   const [showIntro, setShowIntro] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // Modals
+  // state buat popup-popup
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isHealthReportOpen, setIsHealthReportOpen] = useState(false);
   const [healthReport, setHealthReport] = useState(null);
   const [isAnalyzingHealth, setIsAnalyzingHealth] = useState(false);
 
-  // Real Production Logs (Clean Initial State)
+  // state data beneran (kosongan di awal)
   const [logs, setLogs] = useState({
     activity: [],
     diet: [],
@@ -65,11 +65,11 @@ export function AppProvider({ children }) {
     screentime: [],
   });
 
-  // Load initial data on client mount, initialize Cloudflare DB & listen to Auth
+  // narik data awal pas pertama buka, nyalain db, sekalian pantau login
   useEffect(() => {
     setIsClient(true);
 
-    // Initialize Cloudflare D1 tables if configured
+    // nyalain db cloudflare kalo disetup
     cloudflareDb.init().catch(() => {});
 
     if (isFirebaseConfigured) {
@@ -85,10 +85,10 @@ export function AppProvider({ children }) {
           setUser(userObj);
           storage.saveUser(userObj);
 
-          // 1. Try fetching profile from Cloudflare D1 first
+          // 1. cobain tarik profil dari d1 dulu
           let fetchedProfile = await cloudflareDb.getProfile(firebaseUser.uid);
           
-          // 2. Fallback to Firestore if D1 returns empty
+          // 2. kalo kosong, baru ngambil dari firestore
           if (!fetchedProfile) {
             fetchedProfile = await getProfileFromFirestore(firebaseUser.uid);
           }
@@ -110,7 +110,7 @@ export function AppProvider({ children }) {
                 weight: fetchedProfile?.weight || 0,
                 gender: fetchedProfile?.gender || 'male',
               });
-              setView('profile'); // Force onboarding for physical data
+              setView('profile'); // maksa user isi data fisik
             }
           }
         } else {
@@ -130,7 +130,7 @@ export function AppProvider({ children }) {
 
       return () => unsubscribe();
     } else {
-      // Local fallback mode
+      // mode lokal tanpa server
       const storedUser = storage.getUser();
       const storedProfile = storage.getProfile();
       if (storedUser && isProfileComplete(storedProfile)) {
@@ -147,7 +147,7 @@ export function AppProvider({ children }) {
     }
   }, []);
 
-  // Reload logs / subscribe to Cloudflare D1 / Firestore logs
+  // refresh data log & dengerin update dari db
   useEffect(() => {
     if (!isClient) return;
 
@@ -155,7 +155,7 @@ export function AppProvider({ children }) {
 
     async function loadLogs() {
       if (user?.uid) {
-        // Try Cloudflare D1 logs
+        // coba tarik log dari d1
         const cfLogs = await cloudflareDb.getLogs(user.uid, selectedDate);
         if (cfLogs && isMounted) {
           setLogs(cfLogs);
@@ -163,7 +163,7 @@ export function AppProvider({ children }) {
         }
       }
 
-      // Firestore or local storage fallback
+      // kalo d1 gagal, lari ke firestore atau lokal
       if (isFirebaseConfigured && user?.uid) {
         const unsubscribe = subscribeToDateLogs(user.uid, selectedDate, (dateLogs) => {
           if (isMounted) setLogs(dateLogs);
@@ -197,7 +197,7 @@ export function AppProvider({ children }) {
     [selectedDate, user?.uid]
   );
 
-  // Authentication Actions
+  // fungsi-fungsi login & daftar
   const handleGoogleLogin = async () => {
     try {
       const fbUser = await signInWithGoogle();
@@ -212,7 +212,7 @@ export function AppProvider({ children }) {
         setUser(userObj);
         storage.saveUser(userObj);
 
-        // Fast check local storage profile first
+        // ngebut cek profil dari lokal dulu
         const localProfile = storage.getProfile();
         if (isProfileComplete(localProfile)) {
           setProfile(localProfile);
@@ -220,7 +220,7 @@ export function AppProvider({ children }) {
           return;
         }
 
-        // Fetch profile from Cloudflare D1 or Firestore
+        // tarik profil dari db
         let profileData = await cloudflareDb.getProfile(fbUser.uid);
         if (!profileData) {
           profileData = await getProfileFromFirestore(fbUser.uid);
@@ -235,7 +235,7 @@ export function AppProvider({ children }) {
             ...prev,
             name: fbUser.displayName || prev.name || '',
           }));
-          setView('profile'); // Ask for age, height, weight etc.
+          setView('profile'); // suruh ngisi umur, tinggi, berat dll
         }
       }
     } catch (error) {
@@ -279,11 +279,11 @@ export function AppProvider({ children }) {
             ...prev,
             name: profileData?.name || prev.name || email.split('@')[0],
           }));
-          setView('profile'); // Force asking physical data
+          setView('profile'); // maksa ngisi data fisik
         }
       }
     } else {
-      // Local fallback
+      // mode lokal
       const newUser = {
         id: 'usr_' + Date.now(),
         uid: 'usr_' + Date.now(),
@@ -322,7 +322,7 @@ export function AppProvider({ children }) {
           weight: 0,
           gender: 'male',
         });
-        setView('profile'); // Always ask for physical metrics on register
+        setView('profile'); // abis daftar wajib ngisi profil fisik
       }
     } else {
       handleEmailLogin(email, password);
@@ -343,13 +343,13 @@ export function AppProvider({ children }) {
   };
 
   const handleSaveProfile = async (newProfile) => {
-    // 1. Instant optimistic local update (No lag / no UI lock)
+    // 1. update di lokal dulu biar sat set ga pake loading
     const saved = storage.saveProfile(newProfile);
     setProfile(saved);
     setView('app');
     setIsEditProfileOpen(false);
 
-    // 2. Background async sync to databases
+    // 2. sinkron ke db di belakang layar
     if (user?.uid) {
       cloudflareDb.saveProfile(user.uid, saved).catch((err) => {
         console.warn('Background D1 profile save:', err);
@@ -364,7 +364,7 @@ export function AppProvider({ children }) {
   };
 
   const addLogItem = async (type, item, dateKey = selectedDate) => {
-    // 1. Save locally & refresh UI immediately (Zero latency)
+    // 1. simpen ke lokal & update UI seketika (no lelet)
     let record;
     if (type === 'activity') record = storage.addActivity(item, dateKey);
     else if (type === 'diet') record = storage.addDiet(item, dateKey);
@@ -373,7 +373,7 @@ export function AppProvider({ children }) {
 
     refreshLogs(dateKey);
 
-    // 2. Background sync to Cloudflare D1 & Firestore
+    // 2. sinkron ke server diem-diem
     if (user?.uid) {
       cloudflareDb.addLog(user.uid, type, item, dateKey).catch(() => {});
       if (isFirebaseConfigured) {
@@ -385,11 +385,11 @@ export function AppProvider({ children }) {
   };
 
   const deleteLogItem = async (type, id, dateKey = selectedDate) => {
-    // 1. Instant local deletion & UI update
+    // 1. hapus di lokal langsung ilang dari layar
     storage.deleteLog(type, id);
     refreshLogs(dateKey);
 
-    // 2. Background sync to Cloudflare D1 & Firestore
+    // 2. hapus di server diem-diem
     if (user?.uid) {
       cloudflareDb.deleteLog(user.uid, id).catch(() => {});
       if (isFirebaseConfigured) {
@@ -398,15 +398,12 @@ export function AppProvider({ children }) {
     }
   };
 
-  // Real Metrics Calculations
+  // itung-itungan metrik harian
   const totalCal = logs.diet.reduce((acc, curr) => acc + (curr.cal || 0), 0);
   const totalBurned = logs.activity.reduce((acc, curr) => acc + (curr.cal || 0), 0);
   const netCalories = totalCal - totalBurned;
   const totalSteps = logs.activity.reduce((acc, curr) => acc + (curr.steps || 0), 0);
-  const totalDistance = logs.activity.reduce(
-    (acc, curr) => acc + (curr.dist || (curr.steps ? curr.steps * 0.0007 : 0)),
-    0
-  );
+  const totalDistance = logs.activity.reduce((acc, curr) => acc + (curr.dist || 0), 0);
   const lastSleep = logs.sleep[0]?.duration || '0j 0m';
   const totalScreenMinutes = logs.screentime.reduce((acc, curr) => acc + (curr.minutes || 0), 0);
   const formattedScreenTime = `${Math.floor(totalScreenMinutes / 60)}j ${totalScreenMinutes % 60}m`;
@@ -416,7 +413,7 @@ export function AppProvider({ children }) {
   const bmiData = calculateBMI(profile.weight, profile.height);
   const waterTarget = calculateWaterTargetLiters(profile.weight, totalBurned);
 
-  // Health Assessment Analysis
+  // analisa kesehatan pakai AI
   const runHealthAnalysis = async () => {
     setIsAnalyzingHealth(true);
     const userContext = `Nama: ${profile.name}, Usia: ${profile.age}, Tinggi: ${profile.height}cm, Berat: ${profile.weight}kg, BMI: ${bmiData.bmi} (${bmiData.category})`;
