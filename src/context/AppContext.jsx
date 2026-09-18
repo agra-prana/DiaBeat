@@ -181,12 +181,21 @@ export function AppProvider({ children }) {
             cfLogs.screentime.length > 0;
             
           if (hasD1Data) {
-            setLogs(cfLogs);
-            // Idealnya sync balik ke localStorage juga jika D1 punya data yg ga ada di lokal
-            cfLogs.activity.forEach(a => storage.addActivity(a, selectedDate));
-            cfLogs.diet.forEach(a => storage.addDiet(a, selectedDate));
-            cfLogs.sleep.forEach(a => storage.addSleep(a, selectedDate));
-            cfLogs.screentime.forEach(a => storage.addScreenTime(a, selectedDate));
+            // MERGE: Cek data D1, kalau belum ada di lokal, baru tambahin ke lokal.
+            const types = ['activity', 'diet', 'sleep', 'screentime'];
+            types.forEach(type => {
+              cfLogs[type].forEach(item => {
+                const exists = localLogs[type].some(local => local.id === item.id);
+                if (!exists) {
+                  if (type === 'activity') storage.addActivity(item, selectedDate);
+                  else if (type === 'diet') storage.addDiet(item, selectedDate);
+                  else if (type === 'sleep') storage.addSleep(item, selectedDate);
+                  else if (type === 'screentime') storage.addScreenTime(item, selectedDate);
+                }
+              });
+            });
+            // Update UI dengan hasil gabungan dari lokal
+            setLogs(storage.getAllLogs(selectedDate));
           }
           return;
         }
@@ -209,18 +218,11 @@ export function AppProvider({ children }) {
   }, [isClient, user?.uid, selectedDate]);
 
   const refreshLogs = useCallback(
-    async (dateKey = selectedDate) => {
-      if (user?.uid) {
-        const cfLogs = await cloudflareDb.getLogs(user.uid, dateKey);
-        if (cfLogs) {
-          setLogs(cfLogs);
-          return;
-        }
-      }
+    (dateKey = selectedDate) => {
       const data = storage.getAllLogs(dateKey);
       setLogs(data);
     },
-    [selectedDate, user?.uid]
+    [selectedDate]
   );
 
   // fungsi-fungsi login & daftar
@@ -404,9 +406,9 @@ export function AppProvider({ children }) {
 
     // 2. sinkron ke server diem-diem
     if (user?.uid) {
-      cloudflareDb.addLog(user.uid, type, item, dateKey).catch(() => {});
+      cloudflareDb.addLog(user.uid, type, record, dateKey).catch(() => {});
       if (isFirebaseConfigured) {
-        addLogToFirestore(user.uid, type, item, dateKey).catch(() => {});
+        addLogToFirestore(user.uid, type, record, dateKey).catch(() => {});
       }
     }
 

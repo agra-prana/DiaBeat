@@ -53,6 +53,15 @@ export async function POST(request) {
       });
     }
 
+    // Ensure user exists in 'users' table to prevent FOREIGN KEY constraint errors
+    if (userId && action !== 'init') {
+      try {
+        await executeD1Query('INSERT OR IGNORE INTO users (id, email, name) VALUES (?, ?, ?)', [userId, `${userId}@fitplus.app`, 'FitPlus User']);
+      } catch (e) {
+        console.warn('Silent user insert warning:', e.message);
+      }
+    }
+
     switch (action) {
       case 'init': {
         // Auto initialize tables if not exist
